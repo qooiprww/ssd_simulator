@@ -1,6 +1,8 @@
 #include <iostream>
 #include <fstream>
+#include <sstream>
 #include <string>
+
 using namespace std;
 
 //int config_init(int argc, char* argv[]) {
@@ -54,24 +56,17 @@ using namespace std;
 //    return 0;
 //}
 
-char parse_blktrace_line(ifstream *blktrace_file, int *stream_id, long long *start_sec, long long *num_sec) {
-    string blktrace_line;
-    char *ptr;
+char parse_blktrace_line(ifstream *input_stream, int *cpu_id, long long *start_sec, long long *num_sec) {
+    
+    string line;
     long long lpn, len;
     int count;
+    
+    if (getline(*input_stream, line))
+        cout << line << "  hello dolly!" << endl;
+    else
+        printf("End of the file!\n");
 
-    if ((*blktrace_file).is_open()) {
-        while (getline(*blktrace_file, blktrace_line)) {
-            cout << blktrace_line << endl;
-        }
-    }
-//    getline(*blktrace_file, blktrace_line);
-    cout << blktrace_line << endl;
-
-//    if (feof(fp)){
-//        printf("END!\n");
-//        return -1;
-//    }
 //
 //    // TODO: write length 인지, discard option 인지하는 기능
 //    if((ptr = strchr(str, 'W')))
@@ -108,8 +103,8 @@ char parse_blktrace_line(ifstream *blktrace_file, int *stream_id, long long *sta
 }
 
 int main() {
-    int op_count, stream_id, i ;
-    long long start_LPN, length;
+    int cpu_id;
+    long long start_sec, num_sec;
     char op_code;
 
 //    logFile[0] = 0;
@@ -117,22 +112,20 @@ int main() {
 //    logFile[0] = 0;
 //    if( initConf(argc, argv)< 0)
 //        return 0;
-    ifstream blktrace_file;
-    blktrace_file.open("input.out");
-
+    
 //    config_init();
 //    FTL_init();
 //    stat_init();
+    
+    ifstream input_stream("input.out"); // blktrace output file
+// TODO: hanlde exception for file input stream
 
-//    if ( (blktrace_file = fopen(logFile, "r")) == 0 ) {
-//        printf("Open File Fail \n");
-//        exit(1);
-//    }
-    string ans;
-    getline(blktrace_file, ans);
-    cout << ans << endl;
-    op_code = parse_blktrace_line(&blktrace_file, &stream_id, &start_LPN, &length);
+    op_code = parse_blktrace_line(&input_stream, &cpu_id, &start_sec, &num_sec);
     cout << op_code << endl;
+    
+    input_stream.close();
+    
+    
 //
 //    printConf();
 //
@@ -158,6 +151,6 @@ int main() {
 //    print_stat_summary();
 //
 //    FTL_close();
-    blktrace_file.close();
+    
     return 0;
 }
