@@ -1,12 +1,27 @@
-#include "ftl.h"
+#include "ftl.hpp"
 #include <string>
 #include <iostream>
 
 using namespace std;
 
+long long LOGICAL_FLASH_SIZE = 1;
+long long OP_REGION ;
+long long LOGICAL_PAGE ;
+long long FLASH_SIZE;
+
+long long BLOCKS_PER_FLASH = 1;
+long long PAGES_PER_FLASH = 1024;
+int cpu_num = 1;
+
+STATISTICS total_stat;
+STATISTICS cpu_stat [CPU_MAX];
+LOGICAL_MAP *logical_map;
+PHYSICAL_MAP *physical_map;
+BLOCK_MAP *block_map;
+CURRENT_STATE *current_state;
+FREE_BLOCKS free_blocks;
 
 void init_stat() {
-    int i;
 
     total_stat.read_cnt = 0;
     total_stat.write_cnt = 0;

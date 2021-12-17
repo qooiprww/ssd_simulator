@@ -2,7 +2,7 @@
 #include <fstream>
 #include <string>
 #include <regex>
-#include "ftl.h"
+#include "ftl.hpp"
 #include <unistd.h>
 
 using namespace std;
@@ -87,8 +87,8 @@ string parse_blktrace_line(ifstream *input_stream, int *cpu_id, long long *start
 
 int main() {
     ftl_init();
-//    ftl_write(100, 0);
-//    ftl_close();
+    ftl_write(100, 0);
+    ftl_close();
     
     
     

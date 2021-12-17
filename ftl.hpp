@@ -1,3 +1,6 @@
+#ifndef FTL_HPP
+#define FTL_HPP
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -11,18 +14,17 @@
 #define getBlockNo(ppn) (ppn/PAGES_PER_BLOCK)
 #define getPageNo(ppn) (ppn%PAGES_PER_BLOCK)
 
-long long LOGICAL_FLASH_SIZE ;
-long long OP_REGION ;
-long long LOGICAL_PAGE ;
-long long FLASH_SIZE;
+extern long long LOGICAL_FLASH_SIZE;
+extern long long OP_REGION ;
+extern long long LOGICAL_PAGE ;
+extern long long FLASH_SIZE;
 
-long long BLOCKS_PER_FLASH;
-long long PAGES_PER_FLASH;
-
-void printCount();
+extern long long BLOCKS_PER_FLASH;
+extern long long PAGES_PER_FLASH;
 
 void ftl_init();
 void ftl_close();
+
 int ftl_gc();
 //int ftl_GC_stream();
 //void ftl_read(int lpn);
@@ -33,7 +35,7 @@ int ftl_write(int lpn, int streamID);
 
 const int CPU_MAX = 4;
 
-int cpu_num;
+extern int cpu_num;
 
 
 typedef struct _STATISTICS {
@@ -44,8 +46,8 @@ typedef struct _STATISTICS {
     long long copyback_cnt;
 }STATISTICS;
 
-STATISTICS total_stat;
-STATISTICS cpu_stat [CPU_MAX];
+extern STATISTICS total_stat;
+extern STATISTICS cpu_stat [CPU_MAX];
 
 
 typedef struct _LOGICAL_MAP{ // This is a logical page table that stores physical page number
@@ -57,8 +59,8 @@ typedef struct _PHYSICAL_MAP{ // This is a physical page table that stores logic
     int is_valid; // TODO: Should handle erased status too!
 }PHYSICAL_MAP;
 
-LOGICAL_MAP *logical_map;
-PHYSICAL_MAP *physical_map;
+extern LOGICAL_MAP *logical_map;
+extern PHYSICAL_MAP *physical_map;
 
 
 typedef struct _BLOCK_MAP{
@@ -68,7 +70,7 @@ typedef struct _BLOCK_MAP{
     int cpu_id;
 }BLOCK_MAP;
 
-BLOCK_MAP *block_map;
+extern BLOCK_MAP *block_map;
 
 
 typedef struct _CURRENT_STATE{
@@ -76,7 +78,7 @@ typedef struct _CURRENT_STATE{
     int page;
 }CURRENT_STATE;
 
-CURRENT_STATE *current_state;
+extern CURRENT_STATE *current_state;
 
 
 typedef struct _FREE_BLOCKS{
@@ -85,4 +87,6 @@ typedef struct _FREE_BLOCKS{
     int tail;
 }FREE_BLOCKS;
 
-FREE_BLOCKS free_blocks;
+extern FREE_BLOCKS free_blocks;
+
+#endif

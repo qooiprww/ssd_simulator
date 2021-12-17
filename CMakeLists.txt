@@ -3,4 +3,4 @@ project(ssd_simulator)
 
 set(CMAKE_CXX_STANDARD 14)
 
-add_executable(ssd_simulator main.cpp)
+add_executable(ssd_simulator main.cpp ftl.cpp)
