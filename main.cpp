@@ -1,7 +1,9 @@
 #include <iostream>
 #include <fstream>
-#include <sstream>
 #include <string>
+#include <regex>
+#include "ftl.h"
+#include <unistd.h>
 
 using namespace std;
 
@@ -56,56 +58,43 @@ using namespace std;
 //    return 0;
 //}
 
-char parse_blktrace_line(ifstream *input_stream, int *cpu_id, long long *start_sec, long long *num_sec) {
+string parse_blktrace_line(ifstream *input_stream, int *cpu_id, long long *start_sec, long long *num_sec) {
     
-    string line;
-    long long lpn, len;
-    int count;
-    
-    if (getline(*input_stream, line))
-        cout << line << "  hello dolly!" << endl;
+    string line, RWBS;
+    regex cpu_id_regex("^(?:\\s+)?(?:\\S+\\s+){1}(\\d+)");
+    regex RWBS_regex("^(?:\\s+)?(?:\\S+\\s+){6}(\\w+)");
+    regex start_sec_regex("^(?:\\s+)?(?:\\S+\\s+){7}(\\d+)");
+    regex num_sec_regex("^(?:\\s+)?(?:\\S+\\s+){9}(\\d+)");
+    cmatch regex_result;
+
+    if (getline(*input_stream, line)){
+        regex_search(line.c_str(), regex_result, cpu_id_regex);
+        *cpu_id = stoi(regex_result[1]);
+        regex_search(line.c_str(), regex_result, RWBS_regex);
+        RWBS = regex_result[1];
+        regex_search(line.c_str(), regex_result, start_sec_regex);
+        *start_sec = stoll(regex_result[1]);
+        regex_search(line.c_str(), regex_result, num_sec_regex);
+        *num_sec = stoll(regex_result[1]);
+    }
     else
         printf("End of the file!\n");
+    cout << *cpu_id << " " << RWBS << " "<< *start_sec << " "<< *num_sec << endl;
 
-//
-//    // TODO: write length 인지, discard option 인지하는 기능
-//    if((ptr = strchr(str, 'W')))
-//    {
-//        new = strtok(ptr, " ");
-//        count = 0;
-//        while(new != NULL ) {
-//            if(count == 1) {
-//                sscanf(new, "%lld", &lpn);
-//            } else if (count == 3) {
-//                sscanf(new, "%lld", &len);
-//            }
-//            new = strtok(NULL, " ");
-//            count ++;
-//        }
-//
-//
-//        if((lpn+len)*SECTOR_SIZE/PAGE_SIZE < LOGICAL_PAGE) {
-//            *start_LPN = lpn*SECTOR_SIZE/PAGE_SIZE;
-//            *length = len*SECTOR_SIZE/PAGE_SIZE;
-//        }
-//        else {
-//            printf("[ERROR] (%s, %d) lpn range\n", __func__, __LINE__);
-//            return -1;
-//        }
-//
-//        return 1;
-//    } else {
-//        printf("%s\n", str);
-//        return 0;
-//    }
-//    return 0;
-    return 'c';
+
+    return RWBS;
 }
 
 int main() {
-    int cpu_id;
-    long long start_sec, num_sec;
-    char op_code;
+    ftl_init();
+//    ftl_write(100, 0);
+//    ftl_close();
+    
+    
+    
+//    int cpu_id;
+//    long long start_sec, num_sec;
+//    string op_code;
 
 //    logFile[0] = 0;
 //    statFile[0] = 0;
@@ -117,13 +106,13 @@ int main() {
 //    FTL_init();
 //    stat_init();
     
-    ifstream input_stream("input.out"); // blktrace output file
-// TODO: hanlde exception for file input stream
-
-    op_code = parse_blktrace_line(&input_stream, &cpu_id, &start_sec, &num_sec);
-    cout << op_code << endl;
-    
-    input_stream.close();
+//    ifstream input_stream("C:\\Users\\peter\\Desktop\\csc2233\\final_project\\ssd_simulator\\input.out"); // blktrace output file
+//// TODO: hanlde exception for file input stream
+//
+//    op_code = parse_blktrace_line(&input_stream, &cpu_id, &start_sec, &num_sec);
+//    cout << op_code << endl;
+//
+//    input_stream.close();
     
     
 //
