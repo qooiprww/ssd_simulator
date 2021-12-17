@@ -28,7 +28,7 @@ void ftl_close();
 int ftl_gc();
 //int ftl_GC_stream();
 //void ftl_read(int lpn);
-int ftl_write(int lpn, int streamID);
+int ftl_write(int page_num, int cpu_id);
 
 
 //-------------------------------

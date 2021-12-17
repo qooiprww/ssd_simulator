@@ -9,8 +9,8 @@ long long OP_REGION ;
 long long LOGICAL_PAGE ;
 long long FLASH_SIZE;
 
-long long BLOCKS_PER_FLASH = 1;
-long long PAGES_PER_FLASH = 1024;
+long long BLOCKS_PER_FLASH = 2048;
+long long PAGES_PER_FLASH = 2097152;
 int cpu_num = 1;
 
 STATISTICS total_stat;

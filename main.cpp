@@ -6,7 +6,6 @@
 #include <unistd.h>
 
 using namespace std;
-
 //int config_init(int argc, char* argv[]) {
 //    int i ;
 //    int param_opt, op;
@@ -58,9 +57,10 @@ using namespace std;
 //    return 0;
 //}
 
-string parse_blktrace_line(ifstream *input_stream, int *cpu_id, long long *start_sec, long long *num_sec) {
-    
-    string line, RWBS;
+char parse_blktrace_line(ifstream *input_stream, int *cpu_id, long long *start_page, long long *num_page) {
+    string RWBS;
+    char op_code;
+    string line;
     regex cpu_id_regex("^(?:\\s+)?(?:\\S+\\s+){1}(\\d+)");
     regex RWBS_regex("^(?:\\s+)?(?:\\S+\\s+){6}(\\w+)");
     regex start_sec_regex("^(?:\\s+)?(?:\\S+\\s+){7}(\\d+)");
@@ -72,29 +72,37 @@ string parse_blktrace_line(ifstream *input_stream, int *cpu_id, long long *start
         *cpu_id = stoi(regex_result[1]);
         regex_search(line.c_str(), regex_result, RWBS_regex);
         RWBS = regex_result[1];
+        op_code = RWBS[0];
         regex_search(line.c_str(), regex_result, start_sec_regex);
-        *start_sec = stoll(regex_result[1]);
+        *start_page = stoll(regex_result[1])*SECTOR_SIZE/PAGE_SIZE;
         regex_search(line.c_str(), regex_result, num_sec_regex);
-        *num_sec = stoll(regex_result[1]);
+        *num_page = stoll(regex_result[1])*SECTOR_SIZE/PAGE_SIZE;
     }
-    else
+    else{
         printf("End of the file!\n");
-    cout << *cpu_id << " " << RWBS << " "<< *start_sec << " "<< *num_sec << endl;
+    }
+    cout << *cpu_id << " " << RWBS << " "<< *start_page << " "<< *num_page << endl;
 
 
-    return RWBS;
+    return op_code;
+}
+
+void print_stat_summary() {
+    printf("\nread: %lld\t\twrite: %lld\n", total_stat.read_cnt, total_stat.write_cnt);
+    printf("gc: %lld\tcopyback: %lld\n\n", total_stat.gc_cnt, total_stat.copyback_cnt);
+    if(total_stat.write_cnt!=0)
+        printf("WAF: %lf\n", (double)(total_stat.write_cnt+total_stat.copyback_cnt)/total_stat.write_cnt);
 }
 
 int main() {
+
+    int cpu_id = 0;
+    long long start_page, num_page;
+    char op_code;
+
+    // TODO: hanlde exception for file input stream
+    ifstream input_stream("C:\\Users\\peter\\Desktop\\csc2233\\final_project\\ssd_simulator\\input.out"); // blktrace output file
     ftl_init();
-    ftl_write(100, 0);
-    ftl_close();
-    
-    
-    
-//    int cpu_id;
-//    long long start_sec, num_sec;
-//    string op_code;
 
 //    logFile[0] = 0;
 //    statFile[0] = 0;
@@ -106,40 +114,31 @@ int main() {
 //    FTL_init();
 //    stat_init();
     
-//    ifstream input_stream("C:\\Users\\peter\\Desktop\\csc2233\\final_project\\ssd_simulator\\input.out"); // blktrace output file
-//// TODO: hanlde exception for file input stream
-//
-//    op_code = parse_blktrace_line(&input_stream, &cpu_id, &start_sec, &num_sec);
-//    cout << op_code << endl;
-//
-//    input_stream.close();
-    
-    
 //
 //    printConf();
 //
 //
-//    op_count = 0;
-//    while (EOF) {
-//
-//        op_code = parse_blktrace_line(blktrace_file, &stream_id, &start_LPN, &length);
-//
-//        switch(op_code) {
-//            case 'W':
-//                FTL_write(start_LPN+i, 0);
-//                break;
-//            default:
-//                break;
-//        }
-//
-//        op_count ++;
-//    }
-//
-//    fclose(blktrace_file);
-//
-//    print_stat_summary();
-//
-//    FTL_close();
+    while (input_stream.peek() != EOF) {
+
+        op_code = parse_blktrace_line(&input_stream, &cpu_id, &start_page, &num_page);
+        switch(op_code) {
+            case 'W':
+                for(int page_offset = 0; page_offset < num_page;  page_offset++){
+                    ftl_write(start_page + page_offset, 0);
+                    total_stat.read_cnt++;
+                }
+                break;
+            default:
+                break;
+        }
+
+    }
+
+    input_stream.close();
+
+    print_stat_summary();
+
+    ftl_close();
     
     return 0;
 }
