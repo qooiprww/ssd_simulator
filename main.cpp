@@ -60,32 +60,48 @@ using namespace std;
 char parse_blktrace_line(ifstream *input_stream, int *cpu_id, long long *start_page, long long *num_page) {
     string RWBS;
     char op_code;
-    string line;
+    string line, action;
     regex cpu_id_regex("^(?:\\s+)?(?:\\S+\\s+){1}(\\d+)");
+    regex action_regex("^(?:\\s+)?(?:\\S+\\s+){5}(\\w+)");
     regex RWBS_regex("^(?:\\s+)?(?:\\S+\\s+){6}(\\w+)");
     regex start_sec_regex("^(?:\\s+)?(?:\\S+\\s+){7}(\\d+)");
     regex num_sec_regex("^(?:\\s+)?(?:\\S+\\s+){9}(\\d+)");
     cmatch regex_result;
-
-    if (getline(*input_stream, line)){
-        regex_search(line.c_str(), regex_result, cpu_id_regex);
-        *cpu_id = stoi(regex_result[1]);
-        regex_search(line.c_str(), regex_result, RWBS_regex);
-        RWBS = regex_result[1];
-        op_code = RWBS[0];
-        regex_search(line.c_str(), regex_result, start_sec_regex);
-        *start_page = stoll(regex_result[1])*SECTOR_SIZE/PAGE_SIZE;
-        regex_search(line.c_str(), regex_result, num_sec_regex);
-        *num_page = stoll(regex_result[1])*SECTOR_SIZE/PAGE_SIZE;
+    for(int line_cnt = 0; line_cnt < BLKTRACE_PARSING_THRESHOLD; line_cnt++){
+        if (getline(*input_stream, line)){
+            regex_search(line.c_str(), regex_result, cpu_id_regex);
+            *cpu_id = stoi(regex_result[1]);
+            regex_search(line.c_str(), regex_result, RWBS_regex);
+            RWBS = regex_result[1];
+            op_code = RWBS[0];
+            regex_search(line.c_str(), regex_result, start_sec_regex);
+            *start_page = stoll(regex_result[1])*SECTOR_SIZE/PAGE_SIZE;
+            try{
+                if(*start_page > LOGICAL_PAGE) {
+//                    cout << *start_page << "   "  << LOGICAL_PAGE << "     " << PAGES_PER_FLASH << endl;
+                    throw string("[ERROR] parse_blktrace_line: page number exceeds total logical flash size!");
+                }
+            }
+            catch (string err_message) {
+                cout << err_message << endl;
+                exit(0);
+            }
+            regex_search(line.c_str(), regex_result, num_sec_regex);
+            *num_page = stoll(regex_result[1])*SECTOR_SIZE/PAGE_SIZE;
+            regex_search(line.c_str(), regex_result, action_regex);
+            action = regex_result[1];
+            if(action == "D"){
+                break;
+            }
+        }
+        else{
+            printf("End of the file!\n");
+        }
     }
-    else{
-        printf("End of the file!\n");
-    }
-    cout << *cpu_id << " " << RWBS << " "<< *start_page << " "<< *num_page << endl;
-
-
     return op_code;
 }
+
+
 
 void print_stat_summary() {
     printf("\nread: %lld\t\twrite: %lld\n", total_stat.read_cnt, total_stat.write_cnt);
@@ -101,7 +117,7 @@ int main() {
     char op_code;
 
     // TODO: hanlde exception for file input stream
-    ifstream input_stream("C:\\Users\\peter\\Desktop\\csc2233\\final_project\\ssd_simulator\\input.out"); // blktrace output file
+    ifstream input_stream("input3.out"); // blktrace output file
     ftl_init();
 
 //    logFile[0] = 0;
@@ -123,10 +139,16 @@ int main() {
         op_code = parse_blktrace_line(&input_stream, &cpu_id, &start_page, &num_page);
         switch(op_code) {
             case 'W':
-                for(int page_offset = 0; page_offset < num_page;  page_offset++){
+                for(int page_offset = 0; page_offset < num_page;  page_offset++)
                     ftl_write(start_page + page_offset, 0);
-                    total_stat.read_cnt++;
-                }
+                break;
+            case 'D':
+                for(int page_offset = 0; page_offset < num_page;  page_offset++)
+                    ftl_discard(start_page + page_offset, 0);
+                break;
+            case 'R':
+                for(int page_offset = 0; page_offset < num_page;  page_offset++)
+                    ftl_read(start_page + page_offset, 0);
                 break;
             default:
                 break;

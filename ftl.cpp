@@ -4,13 +4,14 @@
 
 using namespace std;
 
-long long LOGICAL_FLASH_SIZE = 1;
-long long OP_REGION ;
-long long LOGICAL_PAGE ;
-long long FLASH_SIZE;
+long long LOGICAL_FLASH_SIZE = 32 * 1024 * 1024;
+long long OP_REGION = LOGICAL_FLASH_SIZE * 7 / 100;
+long long LOGICAL_PAGE = LOGICAL_FLASH_SIZE / PAGE_SIZE;
+long long FLASH_SIZE = LOGICAL_FLASH_SIZE + OP_REGION;
 
-long long BLOCKS_PER_FLASH = 2048;
-long long PAGES_PER_FLASH = 2097152;
+long long BLOCKS_PER_FLASH = FLASH_SIZE / BLOCK_SIZE;
+long long PAGES_PER_FLASH = FLASH_SIZE / PAGE_SIZE;
+
 int cpu_num = 1;
 
 STATISTICS total_stat;
@@ -48,11 +49,12 @@ void ftl_init() {
     free_blocks.tail = BLOCKS_PER_FLASH - 1;
     
 
-    logical_map = (LOGICAL_MAP*) malloc(sizeof(LOGICAL_MAP) * LOGICAL_PAGE);
-    physical_map = (PHYSICAL_MAP*) malloc(sizeof(PHYSICAL_MAP) * PAGES_PER_FLASH);
-    block_map = (BLOCK_MAP*) malloc(sizeof(BLOCK_MAP) * BLOCKS_PER_FLASH);
+    logical_map = new LOGICAL_MAP[LOGICAL_PAGE];
+    physical_map = new PHYSICAL_MAP[PAGES_PER_FLASH];
+    block_map = new BLOCK_MAP[BLOCKS_PER_FLASH];
 
-    current_state = (CURRENT_STATE*) malloc(sizeof(CURRENT_STATE) * cpu_num);
+    current_state = new CURRENT_STATE[cpu_num];
+    
         
     for(long long i = 0; i < PAGES_PER_FLASH; i++) {
         if(i < LOGICAL_PAGE){
@@ -78,10 +80,10 @@ void ftl_init() {
 
 
 void ftl_close() {
-    free(current_state);
-    free(physical_map);
-    free(logical_map);
-    free(block_map);
+    delete[] logical_map;
+    delete[] physical_map;
+    delete[] block_map;
+    delete[] current_state;
 }
 
 
@@ -192,6 +194,12 @@ int ftl_gc() {
     // Erase and free gc_block and add it to free_blocks linked list
     ftl_erase(gc_block);
 
+//    if (total_stat.gc_cnt == 0) {
+        printf("\nread: %lld\t\twrite: %lld\n", total_stat.read_cnt, total_stat.write_cnt);
+        printf("gc: %lld\tcopyback: %lld\n\n\n\n", total_stat.gc_cnt, total_stat.copyback_cnt);
+//    }
+    
+    
     total_stat.gc_cnt++;
     // TODO: add cpu_id
     
@@ -307,4 +315,21 @@ int ftl_write(int page_num, int cpu_id) {
 
     current_state[cpu_id].page++;
     return 1;
+}
+
+
+void ftl_discard(int page_num, int cpu_id) {
+    int phys_num;
+
+    total_stat.discard_cnt++;
+    phys_num = logical_map[page_num].num;
+    physical_map[phys_num].num = -1;
+    physical_map[phys_num].is_valid = 0;
+    
+    int block_num = phys_num / PAGES_PER_BLOCK;
+    block_map[block_num].invalid_cnt++;
+}
+
+void ftl_read (int page_num, int cpu_id) {
+    total_stat.read++;
 }

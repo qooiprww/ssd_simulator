@@ -11,12 +11,14 @@
 //#define BLOCK_SIZE 524288
 #define BLOCK_SIZE 4194304
 
+#define BLKTRACE_PARSING_THRESHOLD 10 // Number of attempts for parse_blktrace_line to find a D action line
+
 #define getBlockNo(ppn) (ppn/PAGES_PER_BLOCK)
 #define getPageNo(ppn) (ppn%PAGES_PER_BLOCK)
 
 extern long long LOGICAL_FLASH_SIZE;
-extern long long OP_REGION ;
-extern long long LOGICAL_PAGE ;
+extern long long OP_REGION;
+extern long long LOGICAL_PAGE;
 extern long long FLASH_SIZE;
 
 extern long long BLOCKS_PER_FLASH;
@@ -29,6 +31,8 @@ int ftl_gc();
 //int ftl_GC_stream();
 //void ftl_read(int lpn);
 int ftl_write(int page_num, int cpu_id);
+void ftl_discard(int page_num, int cpu_id);
+void ftl_read (int page_num, int cpu_id)
 
 
 //-------------------------------
