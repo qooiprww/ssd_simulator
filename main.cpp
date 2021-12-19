@@ -4,34 +4,57 @@
 #include <regex>
 #include "ftl.hpp"
 #include <unistd.h>
+#include <boost/program_options.hpp>
 
 using namespace std;
-//int config_init(int argc, char* argv[]) {
+
+options_description desc("Allowed options");
+desc.add_options()
+("help", "produce help message")
+("compression", po::value<int>(), "set compression level")
+;
+
+char* getCmdOption(char ** begin, char ** end, const std::string & option)
+{
+    char ** itr = find(begin, end, option);
+    if (itr != end && ++itr != end)
+    {
+        return *itr;
+    }
+    return 0;
+}
+
+bool cmdOptionExists(char** begin, char** end, const std::string& option)
+{
+    return find(begin, end, option) != end;
+}
+//
+//int config_init(int argc, char* argv[])
+//{
 //    int i ;
 //    int param_opt, op;
 //
 //    LOGICAL_FLASH_SIZE = 0;
-//    streamNum = 1;
 //    op = 7;
 //
 //    // option get
-//    while ((param_opt = getopt(argc, argv, "s:f:o:r:m:l:")) != -1){
-//        switch(param_opt)
+//for(;;){
+//        switch(getopt(argc, argv, "icoh:"))
 //        {
-//            case 's':
+//            case 'i':
 //                sscanf(optarg,"%lld", &LOGICAL_FLASH_SIZE);
 //                LOGICAL_FLASH_SIZE *= GB;
 //                break;
-//            case 'f':
+//            case 'c':
 //                strncpy(logFile, optarg, strlen(optarg));
 //                break;
 //            case 'o':
 //                sscanf(optarg, "%d", &op);
 //                break;
-//            case 'r':
+//            case 'h':
 //                strncpy(statFile, optarg, strlen(optarg));
 //                break;
-//            case 'm':
+//            case '?':
 //                sscanf(optarg, "%d", &streamNum);
 //                break;
 //        }
@@ -108,6 +131,17 @@ void print_stat_summary() {
     printf("gc: %lld\tcopyback: %lld\n\n", total_stat.gc_cnt, total_stat.copyback_cnt);
     if(total_stat.write_cnt!=0)
         printf("WAF: %lf\n", (double)(total_stat.write_cnt+total_stat.copyback_cnt)/total_stat.write_cnt);
+}
+
+void write_stat_file() {
+    ofstream myfile ("example.txt");
+    if (myfile.is_open())
+    {
+        myfile << "This is a line.\n";
+        myfile << "This is another line.\n";
+        myfile.close();
+    }
+    else cout << "Unable to open file";
 }
 
 int main() {

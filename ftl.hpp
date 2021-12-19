@@ -32,7 +32,7 @@ int ftl_gc();
 //void ftl_read(int lpn);
 int ftl_write(int page_num, int cpu_id);
 void ftl_discard(int page_num, int cpu_id);
-void ftl_read (int page_num, int cpu_id)
+void ftl_read (int page_num, int cpu_id);
 
 
 //-------------------------------

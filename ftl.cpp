@@ -54,7 +54,7 @@ void ftl_init() {
     block_map = new BLOCK_MAP[BLOCKS_PER_FLASH];
 
     current_state = new CURRENT_STATE[cpu_num];
-    
+
         
     for(long long i = 0; i < PAGES_PER_FLASH; i++) {
         if(i < LOGICAL_PAGE){
@@ -198,8 +198,8 @@ int ftl_gc() {
         printf("\nread: %lld\t\twrite: %lld\n", total_stat.read_cnt, total_stat.write_cnt);
         printf("gc: %lld\tcopyback: %lld\n\n\n\n", total_stat.gc_cnt, total_stat.copyback_cnt);
 //    }
-    
-    
+
+
     total_stat.gc_cnt++;
     // TODO: add cpu_id
     
@@ -325,11 +325,11 @@ void ftl_discard(int page_num, int cpu_id) {
     phys_num = logical_map[page_num].num;
     physical_map[phys_num].num = -1;
     physical_map[phys_num].is_valid = 0;
-    
+
     int block_num = phys_num / PAGES_PER_BLOCK;
     block_map[block_num].invalid_cnt++;
 }
 
 void ftl_read (int page_num, int cpu_id) {
-    total_stat.read++;
+    total_stat.read_cnt++;
 }
