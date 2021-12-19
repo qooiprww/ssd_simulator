@@ -4,13 +4,13 @@
 
 using namespace std;
 
-long long LOGICAL_FLASH_SIZE = 32 * 1024 * 1024;
-long long OP_REGION = LOGICAL_FLASH_SIZE * 7 / 100;
-long long LOGICAL_PAGE = LOGICAL_FLASH_SIZE / PAGE_SIZE;
-long long FLASH_SIZE = LOGICAL_FLASH_SIZE + OP_REGION;
+// long long LOGICAL_FLASH_SIZE;
+// long long OP_REGION;
+// long long LOGICAL_PAGE;
+// long long FLASH_SIZE;
 
-long long BLOCKS_PER_FLASH = FLASH_SIZE / BLOCK_SIZE;
-long long PAGES_PER_FLASH = FLASH_SIZE / PAGE_SIZE;
+// long long BLOCKS_PER_FLASH;
+// long long PAGES_PER_FLASH;
 
 int cpu_num = 1;
 
@@ -195,8 +195,8 @@ int ftl_gc() {
     ftl_erase(gc_block);
 
 //    if (total_stat.gc_cnt == 0) {
-        printf("\nread: %lld\t\twrite: %lld\n", total_stat.read_cnt, total_stat.write_cnt);
-        printf("gc: %lld\tcopyback: %lld\n\n\n\n", total_stat.gc_cnt, total_stat.copyback_cnt);
+        // printf("\nread: %lld\t\twrite: %lld\n", total_stat.read_cnt, total_stat.write_cnt);
+        // printf("gc: %lld\tcopyback: %lld\n\n\n\n", total_stat.gc_cnt, total_stat.copyback_cnt);
 //    }
 
 

@@ -1,10 +1,11 @@
-SET(CMAKE_INCLUDE_PATH ${CMAKE_INCLUDE_PATH} "C:/Users/peter/Desktop/csc2233/final_project/ssd_simulator/boost_1_78_0")
-SET(CMAKE_LIBRARY_PATH ${CMAKE_LIBRARY_PATH} "C:/Users/peter/Desktop/csc2233/final_project/ssd_simulator/boost_1_78_0/lib")
-cmake_minimum_required(VERSION 3.21)
+cmake_minimum_required(VERSION 3.16)
 project(ssd_simulator)
 
 set(CMAKE_CXX_STANDARD 14)
 find_package(Boost REQUIRED COMPONENTS program_options)
-include_directories(${Boost_INCLUDE_DIRS})
-add_executable(ssd_simulator main.cpp ftl.cpp)
-target_link_libraries(ssd_simulator ${Boost_LIBRARIES})
+
+if(Boost_FOUND)
+    include_directories(${Boost_INCLUDE_DIRS}) 
+    add_executable(ssd_simulator main.cpp ftl.cpp)
+    target_link_libraries(ssd_simulator ${Boost_LIBRARIES})
+endif()

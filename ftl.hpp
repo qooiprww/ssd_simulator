@@ -4,25 +4,20 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
-#define SECTOR_SIZE 512
-#define PAGES_PER_BLOCK 1024
-#define PAGE_SIZE 4096
-//#define BLOCK_SIZE 524288
-#define BLOCK_SIZE 4194304
-
 #define BLKTRACE_PARSING_THRESHOLD 10 // Number of attempts for parse_blktrace_line to find a D action line
 
-#define getBlockNo(ppn) (ppn/PAGES_PER_BLOCK)
-#define getPageNo(ppn) (ppn%PAGES_PER_BLOCK)
-
+extern long long SECTOR_SIZE;
+extern long long SECTOR_PER_PAGE;
+extern long long PAGES_PER_BLOCK;
+extern long long PAGE_SIZE;
+extern long long BLOCK_SIZE;
 extern long long LOGICAL_FLASH_SIZE;
 extern long long OP_REGION;
 extern long long LOGICAL_PAGE;
 extern long long FLASH_SIZE;
-
 extern long long BLOCKS_PER_FLASH;
 extern long long PAGES_PER_FLASH;
+extern int OP_PERCENTAGE;
 
 void ftl_init();
 void ftl_close();

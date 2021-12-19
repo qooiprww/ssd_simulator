@@ -1,3 +1,11 @@
 *.o
 *.out
 /cmake-build-debug/
+/build/
+/CMakeFiles/
+*.cmake
+CMakeCache.txt
+log.txt
+Makefile
+ssd_simulator
+.vscode/settings.json
