@@ -1,6 +1,7 @@
 #include "ftl.hpp"
 #include <string>
 #include <iostream>
+#include <set>
 
 using namespace std;
 
@@ -15,7 +16,7 @@ long long PAGES_PER_FLASH = FLASH_SIZE / PAGE_SIZE;
 int cpu_num = 1;
 
 STATISTICS total_stat;
-STATISTICS cpu_stat [CPU_MAX];
+STATISTICS *cpu_stat;
 LOGICAL_MAP *logical_map;
 PHYSICAL_MAP *physical_map;
 BLOCK_MAP *block_map;
@@ -30,15 +31,13 @@ void init_stat() {
     total_stat.copyback_cnt = 0;
     total_stat.gc_cnt = 0;
 
-//    for (i=0 ; i<streamNum ; i++) {
-//        streamStat[i].read = 0;
-//        streamStat[i].write = 0;
-//        streamStat[i].block.copyback = 0;
-//        streamStat[i].block.gcCnt = 0;
-//        streamStat[i].bef_write = 0;
-//        streamStat[i].bef_block.copyback = 0;
-//        streamStat[i].bef_block.gcCnt = 0;
-//    }
+    cpu_stat = new STATISTICS [CPU_MAX];
+    for (int i=0 ; i < cpu_num; i++) {
+        cpu_stat[i].read_cnt = 0;
+        cpu_stat[i].write_cnt = 0;
+        cpu_stat[i].copyback_cnt = 0;
+        cpu_stat[i].gc_cnt = 0;
+    }
 }
 
 void ftl_init() {
@@ -80,130 +79,11 @@ void ftl_init() {
 
 
 void ftl_close() {
+    delete[] cpu_stat;
     delete[] logical_map;
     delete[] physical_map;
     delete[] block_map;
     delete[] current_state;
-}
-
-
-void ftl_erase (int block_num) {
-    block_map[free_blocks.tail].next_block = block_num;
-    free_blocks.tail = block_num;
-    free_blocks.cnt++;
-    block_map[free_blocks.tail].next_block = -1;
-    
-    block_map[block_num].erase_cnt++;
-    block_map[block_num].invalid_cnt = -1; // TODO: Why isn't it 0?
-    block_map[block_num].cpu_id = -1;
-    
-    try {
-        if(free_blocks.head == -1){
-            free_blocks.head = block_num;
-            if(free_blocks.head != free_blocks.tail) {
-                throw string("[ERROR] ftl_erase: free_blocks' linked list has an issue!");
-            }
-        }
-    } catch (string err_message) {
-        cout << err_message << endl;
-        exit(0);
-    }
-}
-
-void ftl_copyback (int block_num) {
-    int start_page = block_num * PAGES_PER_BLOCK;
-    
-    for (int cur_page = start_page; cur_page < start_page + PAGES_PER_BLOCK; ++cur_page) {
-        if (physical_map[cur_page].is_valid) {
-            
-            try {
-                if (current_state[0].page >= PAGES_PER_BLOCK) { // Reached the end of the current block!
-                    // TODO: check if there's any free block available!
-                    throw string("[ERROR] ftl_gc:ftl_copybakc: reached end of the block!");
-                }
-            } catch (string err_message) {
-                cout << err_message << endl;
-                exit(0);
-            }
-
-            int page = physical_map[cur_page].num;
-            
-            // Update old pysical page's status
-            physical_map[cur_page].num = -1;
-            physical_map[cur_page].is_valid = 0;
-
-            // Copyback
-            int new_phys_num = current_state[0].block * PAGES_PER_BLOCK + current_state[0].page;
-            logical_map[page].num = new_phys_num;
-            physical_map[new_phys_num].num = page;
-            physical_map[new_phys_num].is_valid = 1;
-        
-            // Update stats
-            total_stat.copyback_cnt++;
-            current_state[0].page++;
-        }
-    }
-
-    // TODO: update cpu_stat
-}
-
-
-////////
-// (@VIC) greedy victim selection algorithm
-int victimGreedy() {
-    // TODO: refactor this
-    long long i;
-    int max, res, secondMax, flag;
-    
-    res = 0;
-    max = block_map[0].invalid_cnt;
-    secondMax = max;
-
-    // select most invalidated block
-    for (i=1 ; i<BLOCKS_PER_FLASH ; i++) {
-        if (block_map[i].invalid_cnt > max) {
-            max = block_map[i].invalid_cnt;
-            res = i;
-        }
-    }
-
-    for(i= 0 ; i< cpu_num ; i++)
-        if(res == current_state[i].block) {
-//            printf("[NOTE] (%s, %d) : select update block as a victim (%d %lld)\n", __func__, __LINE__,res, i);
-        }
-
-//    verify.maxInvalidity = max;
-    if (max > PAGES_PER_BLOCK){
-//        printf("[ERROR] (%s, %d) : max invalidity too high\n", __func__, __LINE__);
-        //printCount();
-    }
-
-    return res;
-}
-
-
-
-int ftl_gc() {
-    
-    // Find the proper block for gc
-    int gc_block = victimGreedy();
-    
-    // Copyback the valid pages of gc_block and mark the old physical pages as stale
-    ftl_copyback(gc_block);
-    
-    // Erase and free gc_block and add it to free_blocks linked list
-    ftl_erase(gc_block);
-
-//    if (total_stat.gc_cnt == 0) {
-        printf("\nread: %lld\t\twrite: %lld\n", total_stat.read_cnt, total_stat.write_cnt);
-        printf("gc: %lld\tcopyback: %lld\n\n\n\n", total_stat.gc_cnt, total_stat.copyback_cnt);
-//    }
-    
-    
-    total_stat.gc_cnt++;
-    // TODO: add cpu_id
-    
-    return gc_block;
 }
 
 
@@ -234,28 +114,156 @@ int fetch_free_block(int cpu_id) {
 }
 
 
-// this function is for searching free block from free block list
-// if there is free block less than 1, perform GC
-int search_free_block(int cpu_id) {
-    // TODO: hanlde multi-cpu case!
+void ftl_erase (int block_num) {
+    block_map[free_blocks.tail].next_block = block_num;
+    free_blocks.tail = block_num;
+    free_blocks.cnt++;
+    block_map[free_blocks.tail].next_block = -1;
     
-    if (cpu_num == 1) {
-        if (free_blocks.cnt <= 1) {
-            current_state[cpu_id].block = fetch_free_block(cpu_id);
-            current_state[cpu_id].page = 0;
-
-            ftl_gc();
-            return -1;
+    block_map[block_num].erase_cnt++;
+    block_map[block_num].invalid_cnt = -1; // TODO: Why isn't it 0?
+    block_map[block_num].cpu_id = -1;
+    
+    try {
+        if(free_blocks.head == -1){
+            free_blocks.head = block_num;
+            if(free_blocks.head != free_blocks.tail) {
+                throw string("[ERROR] ftl_erase: free_blocks' linked list has an issue!");
+            }
         }
-    } else {
-        // TODO: bluh
-//        while (freeMeta.freeBlock <= 1) {
+    } catch (string err_message) {
+        cout << err_message << endl;
+        exit(0);
+    }
+}
+
+void ftl_copyback (int block_num) {
+    int cpu_id = block_map[block_num].cpu_id;
+    
+    int start_page = block_num * PAGES_PER_BLOCK;
+    for (int cur_page = start_page; cur_page < start_page + PAGES_PER_BLOCK; ++cur_page)
+        if (physical_map[cur_page].is_valid) {
+            try {
+                if (current_state[cpu_id].page >= PAGES_PER_BLOCK) { // Reached the end of the current block!
+                    int fetched_block = fetch_free_block(cpu_id);
+                    // TODO: move exceptions: throw string("[ERROR] ftl_gc:ftl_copybakc: reached end of the block, and there's no free block left!");
+                    current_state[cpu_id].block = fetched_block;
+                    current_state[cpu_id].page = 0;
+                }
+            } catch (string err_message) {
+                cout << err_message << endl;
+                exit(0);
+            }
+
+            int page = physical_map[cur_page].num;
+            
+            // Free old pysical page
+            physical_map[cur_page].num = -1;
+            physical_map[cur_page].is_valid = 0;
+
+            // Copyback
+            int new_phys_num = current_state[cpu_id].block * PAGES_PER_BLOCK + current_state[cpu_id].page;
+            logical_map[page].num = new_phys_num;
+            physical_map[new_phys_num].num = page;
+            physical_map[new_phys_num].is_valid = 1;
+        
+            // Update stats
+            total_stat.copyback_cnt++;
+            cpu_stat[cpu_id].copyback_cnt++;
+            current_state[cpu_id].page++;
+        }
+}
+
+int choose_gc_block() {
+    // Trying to choose a block for gc to free it
+    
+    int gc_block = -1;
+    int max_invalid_cnt = -2; // TODO: change -2. If statement is strict.
+    
+    set<int> current_blocks;
+    for (int i = 0; i < cpu_num; i++)
+        current_blocks.insert(current_state[i].block);
+
+    // Find a block with max invalid pages
+    for (int i = 0; i < BLOCKS_PER_FLASH; i++) { // TODO: It's better to add dirty field
+        if (current_blocks.count(i))
+            continue;
+        if (block_map[i].invalid_cnt > max_invalid_cnt) {
+            max_invalid_cnt = block_map[i].invalid_cnt;
+            gc_block = i;
+        }
+    }
+
+    try {
+        if (max_invalid_cnt > PAGES_PER_BLOCK)
+            throw string("[ERROR] Invalid_cnt out of bound!\n");
+    } catch (string err_message) {
+        cout << err_message << endl;
+    }
+    
+    int gc_cpu = block_map[gc_block].cpu_id;
+    try {
+        if(gc_cpu < 0 || cpu_num <= gc_cpu)
+            throw string("[ERROR] Invalid cpu_id for gc_block!\n");
+    } catch (string err_message) {
+        cout << err_message << endl;
+    }
+
+    return gc_block;
+}
+
+
+int ftl_gc() {
+    
+    // Find the proper block for gc
+    int gc_block = choose_gc_block();
+    
+    // Copyback the valid pages of gc_block and mark the old physical pages as stale
+    ftl_copyback(gc_block);
+    
+    // Erase and free gc_block and add it to free_blocks linked list
+    ftl_erase(gc_block);
+
+//    if (total_stat.gc_cnt == 0) { // TODO: this is for test /// cpu_stat
+        printf("\nread: %lld\t\twrite: %lld\n", total_stat.read_cnt, total_stat.write_cnt);
+        printf("gc: %lld\tcopyback: %lld\n\n\n\n", total_stat.gc_cnt, total_stat.copyback_cnt);
+//    }
+    
+    
+    total_stat.gc_cnt++;
+    int gc_cpu = block_map[gc_block].cpu_id;
+    cpu_stat[gc_cpu].gc_cnt++; // TODO: what is cpu_stat[gc_cpu].gc_cnt?
+    
+    return gc_block;
+}
+
+
+int search_free_block(int cpu_id) {
+    
+//    if (cpu_num == 1) {
+//        if (free_blocks.cnt <= 1) {
+//            current_state[cpu_id].block = fetch_free_block(cpu_id);
+//            current_state[cpu_id].page = 0;
+//
+//            ftl_gc();
+//            return -1;
+//        }
+//    } else {
+//        while (free_blocks.cnt <= 1) {
 //            int ret = M_GC_stream(); // return code may represent error or gc victim stream number
 //            if(ret < 0)    return -2;
 //            if (ret == streamID)
 //                return -1;
 //        }
+    
+    if (free_blocks.cnt <= 1) {
+        current_state[cpu_id].block = fetch_free_block(cpu_id);
+        current_state[cpu_id].page = 0;
+
+        ftl_gc();
+        return -1;
     }
+//    }
     
     current_state[cpu_id].block = fetch_free_block(cpu_id);
     current_state[cpu_id].page = 0;
@@ -282,7 +290,7 @@ int ftl_write(int page_num, int cpu_id) {
     }
 
     total_stat.write_cnt++;
-//    cpu_stat[cpu_id].write_cnt++;
+    cpu_stat[cpu_id].write_cnt++;
     
     
     if (logical_map[page_num].num != -1) {
@@ -322,6 +330,7 @@ void ftl_discard(int page_num, int cpu_id) {
     int phys_num;
 
     total_stat.discard_cnt++;
+    cpu_stat[cpu_id].discard_cnt++;
     phys_num = logical_map[page_num].num;
     physical_map[phys_num].num = -1;
     physical_map[phys_num].is_valid = 0;
@@ -331,5 +340,6 @@ void ftl_discard(int page_num, int cpu_id) {
 }
 
 void ftl_read (int page_num, int cpu_id) {
-    total_stat.read++;
+    total_stat.read_cnt++;
+    cpu_stat[cpu_id].read_cnt++;
 }
