@@ -2,24 +2,16 @@
 
 using namespace std;
 
+long long bib = 1ll << 3;
 
-typedef struct _FREE_BLOCKS{
-    int cnt;
-    int head;
-    int tail;
-}FREE_BLOCKS;
-
-FREE_BLOCKS *free_blocks;
-
-free_blocks = new FREE_BLOCKS[5];
+int finoo[bib];
 
 int fun () {
     
-    
-    free_blocks[6].cnt = 4;
-    cout << "SF" << endl;
+
     
     
+    finoo[2] = 3;
 //    int x = 0;
     
 //    try {
@@ -50,4 +42,5 @@ int fun () {
 int main () {
    
     cout << fun() << endl;
+    cout << bib << endl;
 }

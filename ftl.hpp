@@ -24,7 +24,6 @@ void ftl_close();
 
 int ftl_gc();
 //int ftl_GC_stream();
-//void ftl_read(int lpn);
 int ftl_write(int page_num, int cpu_id);
 void ftl_discard(int page_num, int cpu_id);
 void ftl_read (int page_num, int cpu_id);
@@ -46,7 +45,7 @@ typedef struct _STATISTICS {
 }STATISTICS;
 
 extern STATISTICS total_stat;
-extern STATISTICS cpu_stat [CPU_MAX];
+extern STATISTICS *cpu_stat;
 
 
 typedef struct _LOGICAL_MAP{ // This is a logical page table that stores physical page number
