@@ -31,14 +31,14 @@ long long PAGES_PER_FLASH;
 void config_init(int argc, char *argv[])
 {
     po::options_description desc("Allowed options");
-    desc.add_options()("help", "produce help message")
+    desc.add_options()("help,h", "produce help message")
     ("input_file,i", po::value<string>(&blktrace_file_path), "Path to blktrace file to simulate")
     ("log_file,o", po::value<string>(&log_file_path), "Path to log file to output simulation result")
     ("lsec_size", po::value<long long>(&SECTOR_SIZE)->default_value(512), "Controller Sector Size")
     ("lsecs_per_pg", po::value<long long>(&SECTOR_PER_PAGE)->default_value(8), "Number of sectors in a flash page")
     ("lpgs_per_blk", po::value<long long>(&PAGES_PER_BLOCK)->default_value(1024), "Number of pages per flash block")
     ("lsize", po::value<long long>(&LOGICAL_FLASH_SIZE)->default_value(33554432), "Total logical size of the flash")
-    ("op", po::value<int>(&OP_PERCENTAGE)->default_value(10), "Percentage of over provisioning size");
+    ("op", po::value<int>(&OP_PERCENTAGE)->default_value(7), "Percentage of over provisioning size");
     po::variables_map vm;
     po::store(po::parse_command_line(argc, argv, desc), vm);
     po::notify(vm);
