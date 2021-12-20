@@ -159,7 +159,7 @@ char parse_blktrace_line(ifstream *input_stream, int *cpu_id, long long *start_p
             regex_search(line.c_str(), regex_result, RWBS_regex);
             RWBS = regex_result[1];
             op_code = RWBS[0];
-            if((*action)[0] == 'U'){
+            if((*action)[0] == 'U' || op_code == 'F'){
                 return op_code;
             }
             if(*action == "C" && RWBS == "WFS"){

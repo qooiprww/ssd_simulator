@@ -89,10 +89,10 @@ void ftl_close() {
         gc_queue.pop();
     } 
     delete[] cpu_stat;
-    delete[] logical_map;
     delete[] physical_map;
     delete[] block_map;
     delete[] current_state;
+    delete[] logical_map;
 }
 
 int fetch_free_block(int cpu_id) {
@@ -276,14 +276,18 @@ void ftl_gc() {
     int gc_block;
 
     // Find the proper block for gc
-    if(GC_TYPE == 0){
-        gc_block = greedy_choose_gc_block();
-    }
-    else if(GC_TYPE == 1){
-        gc_block = fifo_choose_gc_block();
-    }
-    else if(GC_TYPE == 2){
-        gc_block = window_choose_gc_block();
+    switch(GC_TYPE){
+        case(0):
+            gc_block = greedy_choose_gc_block();
+            break;
+        case(1):
+            gc_block = fifo_choose_gc_block();
+            break;
+        case(2):
+            gc_block = window_choose_gc_block();
+            break;
+        default:
+            gc_block = greedy_choose_gc_block();
     }
     
     // Copyback the valid pages of gc_block and mark the old physical pages as stale
