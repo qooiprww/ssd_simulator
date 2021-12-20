@@ -159,7 +159,7 @@ char parse_blktrace_line(ifstream *input_stream, int *cpu_id, long long *start_p
             regex_search(line.c_str(), regex_result, start_sec_regex);
             *start_page = stoll(regex_result[1]) / SECTOR_PER_PAGE;
             regex_search(line.c_str(), regex_result, num_sec_regex);
-            *num_page = stoll(regex_result[1]) / SECTOR_PER_PAGE;
+            *num_page = ceil(stod(regex_result[1]) / SECTOR_PER_PAGE);
             regex_search(line.c_str(), regex_result, action_regex);
             *action = regex_result[1];
         }

@@ -25,6 +25,7 @@ extern int CPU_MAX;
 extern int GC_THRESHOLD;
 extern int GC_TYPE;
 extern int GC_WINDOW_SIZE;
+extern int cpu_num;
 
 //TODO: change uneccensary long long variable type to int
 void ftl_init();
@@ -38,10 +39,6 @@ void ftl_read (int page_num, int cpu_id);
 
 
 //-------------------------------
-
-
-
-extern int cpu_num;
 
 // GC variables
 extern long long total_invalid_cnt;
