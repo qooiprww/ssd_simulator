@@ -1,4 +1,5 @@
 #include <iostream>
+#include <iomanip>
 #include <fstream>
 #include <string>
 #include <regex>
@@ -153,26 +154,34 @@ char parse_blktrace_line(ifstream *input_stream, int *cpu_id, long long *start_p
             (*current_line_num)++;
             regex_search(line.c_str(), regex_result, cpu_id_regex);
             *cpu_id = stoi(regex_result[1]);
+            regex_search(line.c_str(), regex_result, action_regex);
+            *action = regex_result[1];
             regex_search(line.c_str(), regex_result, RWBS_regex);
             RWBS = regex_result[1];
             op_code = RWBS[0];
+            if((*action)[0] == 'U'){
+                return op_code;
+            }
+            if(*action == "C" && RWBS == "WFS"){
+                return op_code;
+            }
             regex_search(line.c_str(), regex_result, start_sec_regex);
             *start_page = stoll(regex_result[1]) / SECTOR_PER_PAGE;
             regex_search(line.c_str(), regex_result, num_sec_regex);
             *num_page = ceil(stod(regex_result[1]) / SECTOR_PER_PAGE);
-            regex_search(line.c_str(), regex_result, action_regex);
-            *action = regex_result[1];
+            
         }
-        catch (exception)
-        {
+        catch (const exception & ex)
+        {      
             cout << "[ERROR] parse_blktrace_line: blktrace file format is incorrect!" << endl;
+            cout <<  "Line "<< *current_line_num << " :"  << line.c_str() << endl;
             exit(0);
         }
 
         try
         {
             if (*start_page > LOGICAL_PAGE)
-            {
+            {  
                 throw string("[ERROR] parse_blktrace_line: page number exceeds total logical flash size!");
             }
         }
@@ -223,7 +232,8 @@ void print_progress(long long current_line_num, long long total_line_num)
         else if (i == pos) cout << ">";
         else cout << " ";
     }
-    cout << "] " << int(progress * 100.0) << " %\r";
+    cout << fixed << setprecision(4);
+    cout << "] " << setw(6) << progress * 100.0 << " %\r";
     cout.flush();
     
 }

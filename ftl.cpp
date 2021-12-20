@@ -40,10 +40,11 @@ void init_stat() {
     total_stat.gc_run_time = 0;
     total_invalid_cnt = 0;
 
-    cpu_stat = new CPU_STATISTICS [cpu_num];
+    cpu_stat = new CPU_STATISTICS[cpu_num];
     for (int i=0 ; i < cpu_num; i++) {
         cpu_stat[i].read_cnt = 0;
         cpu_stat[i].write_cnt = 0;
+        cpu_stat[i].discard_cnt = 0;
     }
 }
 
