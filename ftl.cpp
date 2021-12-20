@@ -2,26 +2,33 @@
 #include <string>
 #include <iostream>
 #include <set>
+#include <chrono>
+#include <queue>
+#include <boost/any.hpp>
 
 using namespace std;
+using namespace chrono;
+using boost::any;
 
-// long long LOGICAL_FLASH_SIZE;
-// long long OP_REGION;
-// long long LOGICAL_PAGE;
-// long long FLASH_SIZE;
-
-// long long BLOCKS_PER_FLASH;
-// long long PAGES_PER_FLASH;
-
-int cpu_num = 1;
+long long total_invalid_cnt;
+queue<int> gc_queue;
 
 STATISTICS total_stat;
-STATISTICS *cpu_stat;
+CPU_STATISTICS *cpu_stat;
 LOGICAL_MAP *logical_map;
 PHYSICAL_MAP *physical_map;
 BLOCK_MAP *block_map;
 CURRENT_STATE *current_state;
 FREE_BLOCKS free_blocks;
+
+void time_callable(void (*func)()) {
+  // Use func like so
+  auto t_start = high_resolution_clock::now();
+  func();
+  auto t_end = high_resolution_clock::now();
+  duration<double, std::milli> ms_double = t_end - t_start;
+  total_stat.gc_run_time += ms_double.count();
+}
 
 void init_stat() {
 
@@ -30,13 +37,13 @@ void init_stat() {
     total_stat.discard_cnt = 0;
     total_stat.copyback_cnt = 0;
     total_stat.gc_cnt = 0;
+    total_stat.gc_run_time = 0;
+    total_invalid_cnt = 0;
 
-    cpu_stat = new STATISTICS [CPU_MAX];
+    cpu_stat = new CPU_STATISTICS [cpu_num];
     for (int i=0 ; i < cpu_num; i++) {
         cpu_stat[i].read_cnt = 0;
         cpu_stat[i].write_cnt = 0;
-        cpu_stat[i].copyback_cnt = 0;
-        cpu_stat[i].gc_cnt = 0;
     }
 }
 
@@ -53,14 +60,13 @@ void ftl_init() {
     block_map = new BLOCK_MAP[BLOCKS_PER_FLASH];
 
     current_state = new CURRENT_STATE[cpu_num];
-
         
     for(long long i = 0; i < PAGES_PER_FLASH; i++) {
         if(i < LOGICAL_PAGE){
             logical_map[i].num = -1;
         }
         if(i < BLOCKS_PER_FLASH) {
-            block_map[i].invalid_cnt = -1;
+            block_map[i].invalid_cnt = 0;
             block_map[i].next_block = i + 1;
             block_map[i].erase_cnt = 0;
             block_map[i].cpu_id = -1;
@@ -77,15 +83,16 @@ void ftl_init() {
     }
 }
 
-
 void ftl_close() {
+    while(!gc_queue.empty()){
+        gc_queue.pop();
+    } 
     delete[] cpu_stat;
     delete[] logical_map;
     delete[] physical_map;
     delete[] block_map;
     delete[] current_state;
 }
-
 
 int fetch_free_block(int cpu_id) {
 
@@ -105,14 +112,8 @@ int fetch_free_block(int cpu_id) {
     // Update new free block's status
     block_map[free_block_num].cpu_id = cpu_id;
 
-
-
-    // TODO: move this to GC
-    // block_map[free_block_num].invalid_cnt = 0;
-
     return free_block_num;
 }
-
 
 void ftl_erase (int block_num) {
     block_map[free_blocks.tail].next_block = block_num;
@@ -120,8 +121,9 @@ void ftl_erase (int block_num) {
     free_blocks.cnt++;
     block_map[free_blocks.tail].next_block = -1;
     
+    total_invalid_cnt -= block_map[block_num].invalid_cnt;
     block_map[block_num].erase_cnt++;
-    block_map[block_num].invalid_cnt = -1; // TODO: Why isn't it 0?
+    block_map[block_num].invalid_cnt = 0;
     block_map[block_num].cpu_id = -1;
     
     try {
@@ -169,16 +171,15 @@ void ftl_copyback (int block_num) {
         
             // Update stats
             total_stat.copyback_cnt++;
-            cpu_stat[cpu_id].copyback_cnt++;
             current_state[cpu_id].page++;
         }
 }
 
-int choose_gc_block() {
+int greedy_choose_gc_block() {
     // Trying to choose a block for gc to free it
 
     int gc_block = -1;
-    int max_invalid_cnt = -2; // TODO: change -2. If statement is strict.
+    int max_invalid_cnt = -1;
     
     set<int> current_blocks;
     for (int i = 0; i < cpu_num; i++)
@@ -186,7 +187,7 @@ int choose_gc_block() {
 
     // Find a block with max invalid pages
     for (int i = 0; i < BLOCKS_PER_FLASH; i++) { // TODO: It's better to add dirty field
-        if (current_blocks.count(i))
+        if (block_map[i].cpu_id == -1 || current_blocks.count(i)) // skip current and free blocks
             continue;
         if (block_map[i].invalid_cnt > max_invalid_cnt) {
             max_invalid_cnt = block_map[i].invalid_cnt;
@@ -201,10 +202,19 @@ int choose_gc_block() {
         cout << err_message << endl;
     }
 
+    try {
+        if (gc_block == -1)
+            throw string("[ERROR] All physical pages are valid! No block left for GC!\n");
+    } catch (string err_message) {
+        cout << err_message << endl;
+        exit(0);
+    }
+
     int gc_cpu = block_map[gc_block].cpu_id;
     try {
-        if(gc_cpu < 0 || cpu_num <= gc_cpu)
+        if(gc_cpu < 0 || cpu_num <= gc_cpu){
             throw string("[ERROR] Invalid cpu_id for gc_block!\n");
+        }
     } catch (string err_message) {
         cout << err_message << endl;
     }
@@ -212,11 +222,68 @@ int choose_gc_block() {
     return gc_block;
 }
 
+int fifo_choose_gc_block() {
+    // Trying to choose a block for gc to free it
+    try {
+        if (gc_queue.size() == 0)
+            throw string("[ERROR] No block is available for GC!\n");
+    } catch (string err_message) {
+        cout << err_message << endl;
+    }
 
-int ftl_gc() {
+    int gc_block = gc_queue.front();
+    gc_queue.pop();
+
+    return gc_block;
+}
+
+int window_choose_gc_block() {
+    // Trying to choose a block for gc to free it
+    try {
+        if (gc_queue.size() == 0)
+            throw string("[ERROR] No block is available for GC!\n");
+    } catch (string err_message) {
+        cout << err_message << endl;
+    }
+
+    int gc_block = -1;
+    int max_invalid_cnt = -1;
+
+    // Find a block with max invalid pages
+    for (int i = 0; i < gc_queue.size(); i++) { // find most dirty block
+        int current_block_num = gc_queue.front();
+        gc_queue.pop();
+        if (block_map[current_block_num].invalid_cnt > max_invalid_cnt) {
+            max_invalid_cnt = block_map[current_block_num].invalid_cnt;
+            gc_block = current_block_num;
+        }
+        gc_queue.push(current_block_num);
+    }
     
+    for (int i = 0; i < gc_queue.size(); i++) { // pop most dirty block
+        int current_block_num = gc_queue.front();
+        gc_queue.pop();
+        if (current_block_num != gc_block) {
+            gc_queue.push(current_block_num);
+        }
+    }
+    return gc_block;
+}
+
+void ftl_gc() {
+    
+    int gc_block;
+
     // Find the proper block for gc
-    int gc_block = choose_gc_block();
+    if(GC_TYPE == 0){
+        gc_block = greedy_choose_gc_block();
+    }
+    else if(GC_TYPE == 1){
+        gc_block = fifo_choose_gc_block();
+    }
+    else if(GC_TYPE == 2){
+        gc_block = window_choose_gc_block();
+    }
     
     // Copyback the valid pages of gc_block and mark the old physical pages as stale
     ftl_copyback(gc_block);
@@ -226,12 +293,16 @@ int ftl_gc() {
 
 
     total_stat.gc_cnt++;
-    int gc_cpu = block_map[gc_block].cpu_id;
-    cpu_stat[gc_cpu].gc_cnt++; // TODO: what is cpu_stat[gc_cpu].gc_cnt?
-    
-    return gc_block;
+    return;
 }
 
+void ftl_gc_on_threshold(){
+    if (GC_THRESHOLD > 0){
+        if(total_invalid_cnt * 100 / PAGES_PER_FLASH > GC_THRESHOLD){
+            ftl_gc();
+        }
+    }
+}
 
 int search_free_block(int cpu_id) {
     
@@ -254,8 +325,7 @@ int search_free_block(int cpu_id) {
     if (free_blocks.cnt <= 1) {
         current_state[cpu_id].block = fetch_free_block(cpu_id);
         current_state[cpu_id].page = 0;
-
-        ftl_gc();
+        time_callable(&ftl_gc);
         return -1;
     }
 //    }
@@ -270,8 +340,6 @@ int search_free_block(int cpu_id) {
 
     return 1;
 }
-
-
 
 int ftl_write(int page_num, int cpu_id) {
     
@@ -295,19 +363,20 @@ int ftl_write(int page_num, int cpu_id) {
 
         int block_num = old_phys_num / PAGES_PER_BLOCK;
         block_map[block_num].invalid_cnt++; // Update coressponding block's meta-data
+        time_callable(&ftl_gc_on_threshold);
     }
 
     // Write New data to curBlock, curPage
     // if update block is full, get new free block to write
     if(current_state[cpu_id].page == PAGES_PER_BLOCK){
+        gc_queue.push(current_state[cpu_id].block);
+        if(GC_TYPE == 2){
+            while(gc_queue.size() > GC_WINDOW_SIZE)
+                gc_queue.pop();
+        }
+        total_invalid_cnt += block_map[current_state[cpu_id].block].invalid_cnt;
         //get new free block
         int freeIndex = search_free_block(cpu_id);
-        
-        if (freeIndex == -2){
-            printf("[ERROR] search free block failed \n");
-            return -2;
-        }
-        // if freeIndex == -1 - GC is done so that new updateBlock is already allocated in GC step.
     }
 
     // write data to new physical address
@@ -320,7 +389,6 @@ int ftl_write(int page_num, int cpu_id) {
     return 1;
 }
 
-
 void ftl_discard(int page_num, int cpu_id) {
     int phys_num;
 
@@ -332,9 +400,17 @@ void ftl_discard(int page_num, int cpu_id) {
 
     int block_num = phys_num / PAGES_PER_BLOCK;
     block_map[block_num].invalid_cnt++;
+    
+    set<int> current_blocks;
+    for (int i = 0; i < cpu_num; i++)
+        current_blocks.insert(current_state[i].block);
+    if (! current_blocks.count(block_num)){
+        total_invalid_cnt++; // Update global meta-data
+    }
+    time_callable(&ftl_gc_on_threshold);
 }
 
-void ftl_read (int page_num, int cpu_id) {
+void ftl_read(int page_num, int cpu_id) {
     total_stat.read_cnt++;
     cpu_stat[cpu_id].read_cnt++;
 }

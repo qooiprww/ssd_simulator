@@ -1,0 +1,18 @@
+Total Stats
+ Read Count           Write Count          Discard Count        GC Count             GC Average Runtime(ms)                   Copyback Count       Write Amplification Factor              
+ 0                    14606                0                    8                    0.04236                                  1720                 1.12                                    
+Stats By CPU
+CPU0:
+ Read Count           Write Count          Discard Count       
+ 0                    14606                0                   
+Block Stats
+ Block Number         Invalid Count        Erase Count         
+ 0                    1024                 0                   
+ 1                    1024                 0                   
+ 2                    1024                 0                   
+ 3                    0                    2                   
+ 4                    361                  1                   
+ 5                    92                   1                   
+ 6                    182                  1                   
+ 7                    331                  2                   
+ 8                    0                    1                   

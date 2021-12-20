@@ -2,6 +2,7 @@
 #include <fstream>
 #include <string>
 #include <regex>
+#include <cmath>
 #include "ftl.hpp"
 #include <unistd.h>
 #include <boost/program_options.hpp>
@@ -19,14 +20,20 @@ long long SECTOR_PER_PAGE;
 long long PAGES_PER_BLOCK;
 long long LOGICAL_FLASH_SIZE;
 int OP_PERCENTAGE;
+int cpu_num;
 
 long long PAGE_SIZE;
 long long BLOCK_SIZE;
 long long OP_REGION;
 long long LOGICAL_PAGE;
 long long FLASH_SIZE;
+long long BLOCKS_PER_LOGICAL_FLASH;
 long long BLOCKS_PER_FLASH;
 long long PAGES_PER_FLASH;
+
+int GC_THRESHOLD;
+int GC_TYPE;
+int GC_WINDOW_SIZE;
 
 void config_init(int argc, char *argv[])
 {
@@ -38,7 +45,11 @@ void config_init(int argc, char *argv[])
     ("lsecs_per_pg", po::value<long long>(&SECTOR_PER_PAGE)->default_value(8), "Number of sectors in a flash page")
     ("lpgs_per_blk", po::value<long long>(&PAGES_PER_BLOCK)->default_value(1024), "Number of pages per flash block")
     ("lsize", po::value<long long>(&LOGICAL_FLASH_SIZE)->default_value(33554432), "Total logical size of the flash")
-    ("op", po::value<int>(&OP_PERCENTAGE)->default_value(7), "Percentage of over provisioning size");
+    ("op", po::value<int>(&OP_PERCENTAGE)->default_value(7), "Percentage of over provisioning size, 1 block is provisioned if smaller than block size")
+    ("cpu", po::value<int>(&cpu_num)->default_value(1), "number of cpu threads")
+    ("gc_th", po::value<int>(&GC_THRESHOLD)->default_value(-1), "Percentage threshold of full blocks' invalid pages to trigger GC. Set to -1 will only do GC at last free block")
+    ("gc_type", po::value<int>(&GC_TYPE)->default_value(0), "GC types 0: Gready 1: fifo 2: Sliding Window")
+    ("gc_win_size", po::value<int>(&GC_WINDOW_SIZE)->default_value(0), "Set when gc_type is 2: sliding window algorithm");
     po::variables_map vm;
     po::store(po::parse_command_line(argc, argv, desc), vm);
     po::notify(vm);
@@ -94,9 +105,30 @@ void config_init(int argc, char *argv[])
         cout << "Percentage of over provisioning size was set to "
              << OP_PERCENTAGE << ".\n";
     }
+    if (vm.count("cpu"))
+    {
+        cout << "Number of cpu threads was set to "
+             << cpu_num << ".\n";
+    }
+    if (vm.count("gc_th"))
+    {
+        cout << "Percentage threshold of invalid pages to trigger GC was set to "
+             << GC_THRESHOLD << ".\n";
+    }
+    if (vm.count("gc_type"))
+    {
+        cout << "GC types was set to "
+             << GC_TYPE << ".\n";
+    }
+    if (vm.count("gc_win_size") && GC_WINDOW_SIZE != 0)
+    {
+        cout << "GC window size was set to "
+             << GC_WINDOW_SIZE << ".\n";
+    }
     PAGE_SIZE = SECTOR_SIZE * SECTOR_PER_PAGE;
     BLOCK_SIZE = PAGE_SIZE * PAGES_PER_BLOCK;
-    OP_REGION = LOGICAL_FLASH_SIZE * OP_PERCENTAGE / 100;
+    BLOCKS_PER_LOGICAL_FLASH = LOGICAL_FLASH_SIZE / BLOCK_SIZE;
+    OP_REGION = max(1, (int)(BLOCKS_PER_LOGICAL_FLASH * OP_PERCENTAGE / 100)) * BLOCK_SIZE;
     LOGICAL_PAGE = LOGICAL_FLASH_SIZE / PAGE_SIZE;
     FLASH_SIZE = LOGICAL_FLASH_SIZE + OP_REGION;
     BLOCKS_PER_FLASH = FLASH_SIZE / BLOCK_SIZE;
@@ -117,14 +149,26 @@ char parse_blktrace_line(ifstream *input_stream, int *cpu_id, long long *start_p
 
     if (getline(*input_stream, line))
     {   
-        (*current_line_num)++;
-        regex_search(line.c_str(), regex_result, cpu_id_regex);
-        *cpu_id = stoi(regex_result[1]);
-        regex_search(line.c_str(), regex_result, RWBS_regex);
-        RWBS = regex_result[1];
-        op_code = RWBS[0];
-        regex_search(line.c_str(), regex_result, start_sec_regex);
-        *start_page = stoll(regex_result[1]) / SECTOR_PER_PAGE;
+        try{
+            (*current_line_num)++;
+            regex_search(line.c_str(), regex_result, cpu_id_regex);
+            *cpu_id = stoi(regex_result[1]);
+            regex_search(line.c_str(), regex_result, RWBS_regex);
+            RWBS = regex_result[1];
+            op_code = RWBS[0];
+            regex_search(line.c_str(), regex_result, start_sec_regex);
+            *start_page = stoll(regex_result[1]) / SECTOR_PER_PAGE;
+            regex_search(line.c_str(), regex_result, num_sec_regex);
+            *num_page = stoll(regex_result[1]) / SECTOR_PER_PAGE;
+            regex_search(line.c_str(), regex_result, action_regex);
+            *action = regex_result[1];
+        }
+        catch (exception)
+        {
+            cout << "[ERROR] parse_blktrace_line: blktrace file format is incorrect!" << endl;
+            exit(0);
+        }
+
         try
         {
             if (*start_page > LOGICAL_PAGE)
@@ -137,10 +181,6 @@ char parse_blktrace_line(ifstream *input_stream, int *cpu_id, long long *start_p
             cout << err_message << endl;
             exit(0);
         }
-        regex_search(line.c_str(), regex_result, num_sec_regex);
-        *num_page = stoll(regex_result[1]) / SECTOR_PER_PAGE;
-        regex_search(line.c_str(), regex_result, action_regex);
-        *action = regex_result[1];
         
     }
     else
@@ -153,15 +193,21 @@ char parse_blktrace_line(ifstream *input_stream, int *cpu_id, long long *start_p
 
 void print_stat_summary()
 {   
-    float waf;
+    float waf, gc_avg_runtime;
     
     cout << "Total Stats\n";
+    
     if (total_stat.write_cnt != 0)
         waf = (float)(total_stat.write_cnt + total_stat.copyback_cnt) / total_stat.write_cnt;
     else
         waf = 0;
-    cout << format(" %-20s %-20s %-20s %-20s %-20s %-40s\n")  % "Read Count" % "Write Count" % "Discard Count" % "GC Count" % "Copyback Count" % "Write Amplification Factor";
-    cout << format(" %-20lld %-20lld %-20lld %-20lld %-20lld %-40.2f\n")  % total_stat.read_cnt % total_stat.write_cnt % total_stat.discard_cnt % total_stat.gc_cnt % total_stat.copyback_cnt % waf;
+    
+    if (total_stat.gc_cnt != 0)
+        gc_avg_runtime = (float)(total_stat.gc_run_time) / total_stat.gc_cnt;
+    else
+        gc_avg_runtime = 0;
+    cout << format(" %-20s %-20s %-20s %-20s %-40s %-20s %-40s\n")  % "Read Count" % "Write Count" % "Discard Count" % "GC Count" % "GC Average Runtime(ms)" % "Copyback Count" % "Write Amplification Factor";
+    cout << format(" %-20lld %-20lld %-20lld %-20lld %-40.5f %-20lld %-40.2f\n")  % total_stat.read_cnt % total_stat.write_cnt % total_stat.discard_cnt % total_stat.gc_cnt % gc_avg_runtime % total_stat.copyback_cnt % waf;
     cout << endl;
     
 }
@@ -210,25 +256,29 @@ void write_stat_file(string file_path)
         exit(0);
     }
 
-    float waf;
+    float waf, gc_avg_runtime;
 
     log_file << "Total Stats\n";
+
     if (total_stat.write_cnt != 0)
         waf = (float)(total_stat.write_cnt + total_stat.copyback_cnt) / total_stat.write_cnt;
     else
         waf = 0;
-    log_file << format(" %-20s %-20s %-20s %-20s %-20s %-40s\n")  % "Read Count" % "Write Count" % "Discard Count" % "GC Count" % "Copyback Count" % "Write Amplification Factor";
-    log_file << format(" %-20lld %-20lld %-20lld %-20lld %-20lld %-40.2f\n")  % total_stat.read_cnt % total_stat.write_cnt % total_stat.discard_cnt % total_stat.gc_cnt % total_stat.copyback_cnt % waf;
+
+    if (total_stat.gc_cnt != 0)
+        gc_avg_runtime = (float)(total_stat.gc_run_time) / total_stat.gc_cnt;
+    else
+        gc_avg_runtime = 0;
+        
+
+    log_file << format(" %-20s %-20s %-20s %-20s %-40s %-20s %-40s\n")  % "Read Count" % "Write Count" % "Discard Count" % "GC Count" % "GC Average Runtime(ms)" % "Copyback Count" % "Write Amplification Factor";
+    log_file << format(" %-20lld %-20lld %-20lld %-20lld %-40.5f %-20lld %-40.2f\n")  % total_stat.read_cnt % total_stat.write_cnt % total_stat.discard_cnt % total_stat.gc_cnt % gc_avg_runtime % total_stat.copyback_cnt % waf;
 
     log_file << "Stats By CPU\n";
-    for(int cpu_id = 0; cpu_id < CPU_MAX; cpu_id++){
-        if (cpu_stat[cpu_id].write_cnt != 0)
-            waf = (float)(cpu_stat[cpu_id].write_cnt + cpu_stat[cpu_id].copyback_cnt) / cpu_stat[cpu_id].write_cnt;
-        else
-            waf = 0;
+    for(int cpu_id = 0; cpu_id < cpu_num; cpu_id++){
         log_file << format("CPU%d:\n") % cpu_id;
-        log_file << format(" %-20s %-20s %-20s %-20s %-20s %-40s\n")  % "Read Count" % "Write Count" % "Discard Count" % "GC Count" % "Copyback Count" % "Write Amplification Factor";
-        log_file << format(" %-20lld %-20lld %-20lld %-20lld %-20lld %-40.2f\n")  % cpu_stat[cpu_id].read_cnt % cpu_stat[cpu_id].write_cnt % cpu_stat[cpu_id].discard_cnt % cpu_stat[cpu_id].gc_cnt % cpu_stat[cpu_id].copyback_cnt % waf;
+        log_file << format(" %-20s %-20s %-20s\n")  % "Read Count" % "Write Count" % "Discard Count";
+        log_file << format(" %-20lld %-20lld %-20lld\n")  % cpu_stat[cpu_id].read_cnt % cpu_stat[cpu_id].write_cnt % cpu_stat[cpu_id].discard_cnt;
     }
 
     log_file << "Block Stats\n";
