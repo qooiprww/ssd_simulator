@@ -1,8 +1,9 @@
 *.o
 *.out
-/cmake-build-debug/
-/build/
-/CMakeFiles/
+.idea/
+cmake-build-debug/
+build/
+CMakeFiles/
 *.cmake
 CMakeCache.txt
 log.txt
