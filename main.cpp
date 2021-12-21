@@ -358,7 +358,7 @@ int main(int argc, char *argv[])
         }
         print_progress(current_line_num, total_line_num);
     }
-
+    print_progress(1, 1);
     input_stream.close();
     cout << "Simulation Finished!" << endl;
     print_stat_summary();
