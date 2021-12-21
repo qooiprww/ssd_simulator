@@ -45,9 +45,9 @@ void config_init(int argc, char *argv[])
     ("lsec_size", po::value<long long>(&SECTOR_SIZE)->default_value(512), "Controller Sector Size")
     ("lsecs_per_pg", po::value<long long>(&SECTOR_PER_PAGE)->default_value(8), "Number of sectors in a flash page")
     ("lpgs_per_blk", po::value<long long>(&PAGES_PER_BLOCK)->default_value(1024), "Number of pages per flash block")
-    ("lsize", po::value<long long>(&LOGICAL_FLASH_SIZE)->default_value(33554432), "Total logical size of the flash")
+    ("lsize", po::value<long long>(&LOGICAL_FLASH_SIZE)->default_value(134217728), "Total logical size of the flash")
     ("op", po::value<int>(&OP_PERCENTAGE)->default_value(7), "Percentage of over provisioning size, 1 block is provisioned if smaller than block size")
-    ("cpu", po::value<int>(&cpu_num)->default_value(1), "number of cpu threads")
+    ("cpu", po::value<int>(&cpu_num)->default_value(2), "number of cpu threads")
     ("gc_th", po::value<int>(&GC_THRESHOLD)->default_value(-1), "Percentage threshold of full blocks' invalid pages to trigger GC. Set to -1 will only do GC at last free block")
     ("gc_type", po::value<int>(&GC_TYPE)->default_value(0), "GC types 0: Gready 1: fifo 2: Sliding Window")
     ("gc_win_size", po::value<int>(&GC_WINDOW_SIZE)->default_value(0), "Set when gc_type is 2: sliding window algorithm");
@@ -167,6 +167,9 @@ char parse_blktrace_line(ifstream *input_stream, int *cpu_id, long long *start_p
             }
             regex_search(line.c_str(), regex_result, start_sec_regex);
             *start_page = stoll(regex_result[1]) / SECTOR_PER_PAGE;
+            if(*start_page == 0){
+                return 'F';
+            }
             regex_search(line.c_str(), regex_result, num_sec_regex);
             *num_page = ceil(stod(regex_result[1]) / SECTOR_PER_PAGE);
             
@@ -312,8 +315,6 @@ int main(int argc, char *argv[])
     config_init(argc, argv);
     ftl_init();
 
-    // TODO: hanlde exception for file input stream
-     // blktrace output file
     try{
         input_stream.open(blktrace_file_path);
     } catch(exception) {
@@ -341,15 +342,15 @@ int main(int argc, char *argv[])
             {
             case 'W':
                 for (int page_offset = 0; page_offset < num_page; page_offset++)
-                    ftl_write(start_page + page_offset, 0);
+                    ftl_write(start_page + page_offset, cpu_id);
                 break;
             case 'D':
                 for (int page_offset = 0; page_offset < num_page; page_offset++)
-                    ftl_discard(start_page + page_offset, 0);
+                    ftl_discard(start_page + page_offset, cpu_id);
                 break;
             case 'R':
                 for (int page_offset = 0; page_offset < num_page; page_offset++)
-                    ftl_read(start_page + page_offset, 0);
+                    ftl_read(start_page + page_offset, cpu_id);
                 break;
             default:
                 break;
