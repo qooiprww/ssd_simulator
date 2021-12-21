@@ -1,6 +1,6 @@
 Total Stats
  Read Count           Write Count          Discard Count        GC Count             GC Average Runtime(ms)                   Copyback Count       Write Amplification Factor              
- 24298                49485                0                    50                   0.02726                                  33601                1.68                                    
+ 24298                49485                0                    50                   0.02519                                  33601                1.68                                    
 Stats By CPU
 CPU0:
  Read Count           Write Count          Discard Count       
