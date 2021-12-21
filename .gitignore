@@ -9,3 +9,6 @@ log.txt
 Makefile
 ssd_simulator
 .vscode/settings.json
+.vscode/launch.json
+ssdtrace-00
+ssdtrace-00-00

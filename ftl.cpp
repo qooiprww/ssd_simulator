@@ -12,6 +12,7 @@ using boost::any;
 
 long long total_invalid_cnt;
 queue<int> gc_queue;
+bool debug = false;
 
 STATISTICS total_stat;
 CPU_STATISTICS *cpu_stat;
@@ -95,11 +96,9 @@ void ftl_close() {
 }
 
 int fetch_free_block(int cpu_id) {
-
     
     if (free_blocks.cnt == 0)
-        throw string("[ERROR] Couldn't find any free block!\n");
-    
+        throw new exception;
 
     // Here we point to the next free block!
     int free_block_num = free_blocks.head;
@@ -134,10 +133,12 @@ void ftl_erase (int block_num) {
         cout << err_message << endl;
         exit(0);
     }
+    if(debug)cout << "erasing block: " << block_num << endl;
 }
 
 void ftl_copyback (int block_num) {
     int cpu_id = block_map[block_num].cpu_id;
+    if(debug)cout << cpu_id << " gc block: " << block_num << endl;
     int start_page = block_num * PAGES_PER_BLOCK;
     for (int cur_page = start_page; cur_page < start_page + PAGES_PER_BLOCK; ++cur_page)
         if (physical_map[cur_page].is_valid) {
@@ -160,12 +161,14 @@ void ftl_copyback (int block_num) {
                             break;
                     }
                     int fetched_block;
-                    try {
+
+                    try{
                         fetched_block = fetch_free_block(cpu_id);
-                    } catch(string err_message) {
-                        cout << err_message << endl;
+                    }catch(exception e){
+                        cout << "[ERROR] Couldn't find any free block for copy back!\n";
                         exit(0);
                     }
+                    if(debug) cout << cpu_id << "getting block during copyback" << fetched_block << endl;
                     current_state[cpu_id].block = fetched_block;
                     current_state[cpu_id].page = 0;
                 }
@@ -262,9 +265,22 @@ int window_choose_gc_block() {
 
     int gc_block = -1;
     int max_invalid_cnt = -1;
+    
+    if(debug){
+        cout << "queue before gc: " << endl;
+        for (int i = 0; i < gc_queue.size(); i++) { // print queue before pop
+            int current_block_num = gc_queue.front();
+            gc_queue.pop();
+            cout << current_block_num << " ";
+            gc_queue.push(current_block_num);
+        }
+        cout << endl;
+    }
+
+    int queue_size = gc_queue.size();
 
     // Find a block with max invalid pages
-    for (int i = 0; i < gc_queue.size(); i++) { // find most dirty block
+    for (int i = 0; i < queue_size; i++) { // find most dirty block
         int current_block_num = gc_queue.front();
         gc_queue.pop();
         if (block_map[current_block_num].invalid_cnt > max_invalid_cnt) {
@@ -273,13 +289,36 @@ int window_choose_gc_block() {
         }
         gc_queue.push(current_block_num);
     }
-    
-    for (int i = 0; i < gc_queue.size(); i++) { // pop most dirty block
+
+    if(debug){
+        cout << "queue between gc: " << endl;
+        for (int i = 0; i < gc_queue.size(); i++) { // print queue before pop
+            int current_block_num = gc_queue.front();
+            gc_queue.pop();
+            cout << current_block_num << " ";
+            gc_queue.push(current_block_num);
+        }
+        cout << endl;
+    }
+
+    for (int i = 0; i < queue_size; i++) { // pop most dirty block
         int current_block_num = gc_queue.front();
         gc_queue.pop();
         if (current_block_num != gc_block) {
             gc_queue.push(current_block_num);
         }
+    }
+
+    if(debug){
+        cout << "queue after gc: " << endl;
+        for (int i = 0; i < gc_queue.size(); i++) { // print queue after pop
+            int current_block_num = gc_queue.front();
+            gc_queue.pop();
+            cout << current_block_num << " ";
+            gc_queue.push(current_block_num);
+        }
+        cout << endl;
+        cout << endl;
     }
     return gc_block;
 }
@@ -301,6 +340,7 @@ void ftl_gc() {
             break;
         default:
             gc_block = greedy_choose_gc_block();
+            break;
     }
     
     // Copyback the valid pages of gc_block and mark the old physical pages as stale
@@ -326,20 +366,26 @@ void search_free_block(int cpu_id) {
     
     if (free_blocks.cnt <= cpu_num) {
         
-        time_callable(&ftl_gc);
-        
-        try {
+        try{
             current_state[cpu_id].block = fetch_free_block(cpu_id);
-        } catch(string err_message) {
-            cout << err_message << endl;
+            
+        }catch(exception e){
+            cout << "[ERROR] Couldn't find any free block to write!\n";
             exit(0);
         }
-
+        if(debug)cout << cpu_id << " getting free block: " << current_state[cpu_id].block << endl;
         current_state[cpu_id].page = 0;
+        
+        while (free_blocks.cnt < cpu_num){
+            time_callable(&ftl_gc);
+        }
+
+        return;
     }
     
     current_state[cpu_id].block = fetch_free_block(cpu_id);
     current_state[cpu_id].page = 0;
+    if(debug)cout << cpu_id << " getting free block: " << current_state[cpu_id].block << endl;
 
 }
 
@@ -357,7 +403,6 @@ int ftl_write(int page_num, int cpu_id) {
     if(current_state[cpu_id].block == -1){
         search_free_block(cpu_id);
     }
-    
     if (logical_map[page_num].num != -1) {
         int old_phys_num = logical_map[page_num].num; // Find the physical page assigned to the page
         physical_map[old_phys_num].num = -1; // Break the link between the physical page & the page
@@ -370,8 +415,10 @@ int ftl_write(int page_num, int cpu_id) {
 
     // Write New data to curBlock, curPage
     // if update block is full, get new free block to write
-    if(current_state[cpu_id].page == PAGES_PER_BLOCK){
+    while(current_state[cpu_id].page == PAGES_PER_BLOCK){
         
+        if(debug) std::cout << cpu_id << " finished block: " << current_state[cpu_id].block << endl;
+
         // Handle GC Algo
         switch(GC_TYPE){
             case(0):
@@ -392,7 +439,6 @@ int ftl_write(int page_num, int cpu_id) {
         //get new free block
         search_free_block(cpu_id);
     }
-
     // write data to new physical address
     int new_phys_num = current_state[cpu_id].block * PAGES_PER_BLOCK + current_state[cpu_id].page;
     logical_map[page_num].num = new_phys_num;
@@ -402,6 +448,8 @@ int ftl_write(int page_num, int cpu_id) {
     total_stat.write_cnt++;
     cpu_stat[cpu_id].write_cnt++;
     current_state[cpu_id].page++;
+    if(debug) cout << cpu_id << " write to block: " << current_state[cpu_id].block<<" page: "<< current_state[cpu_id].page<< endl;
+    if(current_state[cpu_id].page > PAGES_PER_BLOCK) cout << cpu_id << " invalid page num write to block: " << current_state[cpu_id].block<<" page: "<< current_state[cpu_id].page<< endl;
     return 1;
 }
 
